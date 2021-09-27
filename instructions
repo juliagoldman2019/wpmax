@@ -1,0 +1,51 @@
+1) pi-woocommerce-order-date-time-and-type\admin\options.php
+
+array('field'=>'pi_delivery_max_order_per_day', 'label'=>__('Max delivery order per day','pisol-dtt'), 'desc'=>__('','pisol-dtt'), 'type'=>'number', 'default'=>10, 'min'=> 1 ),
+array('field'=>'pi_pickup_max_order_per_day', 'label'=>__('Max pickup order per day','pisol-dtt'), 'desc'=>__('','pisol-dtt'), 'type'=>'number', 'default'=>10, 'min'=> 1 ),
+
+2) pi-woocommerce-order-date-time-and-type\public\class-js.php
+
+    static function notAllowedDates(){
+        
+        global $wpdb; $max = 0;
+        $type_delivery = WC()->session->get( 'pi_delivery_type', false);
+        if($type_delivery == "pickup"){
+            $max = (int)pisol_dtt_get_setting('pi_pickup_max_order_per_day',0);
+        }else{
+            $max = (int)pisol_dtt_get_setting('pi_delivery_max_order_per_day',0);
+        }
+
+        $rs = $wpdb->get_results( "
+            SELECT date from 
+
+            (SELECT meta_value as date, count(post_id) as count FROM `wp_postmeta` WHERE post_id in
+
+            (SELECT post_id FROM `wp_postmeta` WHERE meta_key = 'pi_delivery_type' and meta_value = '".$type_delivery."') 
+
+            and meta_key = 'pi_system_delivery_date' group by meta_value) AS date_count where count >= ".$max
+
+            , OBJECT 
+        );
+
+        $not_allowed_dates = array_map(function ($object) { return $object->date; }, $rs);
+        
+        return $not_allowed_dates;
+
+    }
+
+3) pi-woocommerce-order-date-time-and-type\public\class-js.php
+
+//ajouter juste après $pre_order_days = abs(pisol_dtt_get_setting('pi_preorder_days', 10));
+
+ $not_allowed_dates = self::notAllowedDates();        
+ $allowed_dates = array_values(array_diff($allowed_dates,$not_allowed_dates));
+ 
+4) pi-woocommerce-order-date-time-and-type\public\class-validate.php
+
+//ajouter enfin de la fontion validateCheckout
+
+$not_allowed_dates = pi_dtt_js::notAllowedDates();
+
+if(in_array($_POST['pi_system_delivery_date'], $not_allowed_dates)){
+    $errors->add('error', 'La date n\'est plus disponible, merci de recharger la page et choisir une autre date disponible');
+}
